@@ -1,0 +1,209 @@
+domain soccer_domain {
+    requirements = {
+        reward-deterministic // reward is a deterministic function
+    };
+
+    types {
+        player: object;           // a generic player
+        //x-pos: object;            // x coordinate
+        //y-pos: object;            // y coordinate
+    };
+
+    pvariables {
+        /////////////////////////// non-fluents
+        // NUM_PLAYERS: {non-fluent, int, default = 3};                                // determines the number of players
+
+        ////////////////////////// defining the probability constants
+        PASS_INTERCEPT_PROB1: {non-fluent, real, default = 0.05};                   // the probability that the pass is intercepted in defense area
+        PASS_INTERCEPT_PROB2: {non-fluent, real, default = 0.20};                   // the probability that the pass is intercepted in mid-field
+        PASS_INTERCEPT_PROB3: {non-fluent, real, default = 0.40};                   // the probability that the pass is intercepted in upper wing
+        PASS_INTERCEPT_PROB4: {non-fluent, real, default = 0.40};                   // the probability that the pass is intercepted in lower wing
+        PASS_INTERCEPT_PROB5: {non-fluent, real, default = 0.70};                   // the probability that the pass is intercepted in offense area
+
+        LOSE_POSSESSION_PROB1: {non-fluent, real, default = 0.1};                   // the probability of losing the ball in defense area
+        LOSE_POSSESSION_PROB2: {non-fluent, real, default = 0.4};                   // the probability of losing the ball in mid-field
+        LOSE_POSSESSION_PROB3: {non-fluent, real, default = 0.3};                   // the probability of losing the ball upper wing
+        LOSE_POSSESSION_PROB4: {non-fluent, real, default = 0.3};                   // the probability of losing the ball lower wing
+        LOSE_POSSESSION_PROB5: {non-fluent, real, default = 0.7};                   // the probability of losing the ball offense area
+
+        SHOOT_SUCCESS_PROB1: {non-fluent, real, default = 0.0};                      // the probability that a shoot from the defense area becomes a goal 
+        SHOOT_SUCCESS_PROB2: {non-fluent, real, default = 0.05};                    // the probability that a shoot from the mid-field becomes a goal
+        SHOOT_SUCCESS_PROB3: {non-fluent, real, default = 0.10};                    // the probability that a shoot from the upper wing becomes a goal
+        SHOOT_SUCCESS_PROB4: {non-fluent, real, default = 0.10};                    // the probability that a shoot from the lower wing becomes a goal
+        SHOOT_SUCCESS_PROB5: {non-fluent, real, default = 0.75};                    // the probability that a shoot from the offense area becomes a goal
+
+
+        ////////////////////////// defining the topology of the pitch
+        LEFT_BOUNDARY_X: {non-fluent, int, default = -5};                           // the x coordinate for the left boundary of the pitch
+        RIGHT_BOUNDARY_X: {non-fluent, int, default = 5};                           // the x coordinate for the right boundary of the pitch
+        LOWER_BOUNDARY_Y: {non-fluent, int, default = -5};                          // the y coordinate for the lower boundary of the pitch
+        UPPER_BOUNDARY_Y: {non-fluent, int, default = 5};                           // the y coordinate for the upper boundary of the pitch
+        DEFENSE_AREA_X: {non-fluent, int, default = -2};                            // the x coordinate of the upper base of the defense trapezoid
+        DEFENSE_AREA_Y: {non-fluent, int, default = 2};                             // the y coordinate of the upper base of the defense trapezoid
+        OFFENSE_AREA_X: {non-fluent, int, default = 2};                             // the x coordinate of the upper (smaller) base of the offense trapezoid
+        OFFENSE_AREA_Y: {non-fluent, int, default = 2};                             // the y coordinate of the upper (smaller) base of the offense trapezoid
+
+        ////////////////////////// state-fluents
+        player_pos_x(player): {state-fluent, int, default = 0};                     // determines the x coordinate of a player
+        player_pos_y(player): {state-fluent, int, default = 0};                     // determines the y coordinate of a player
+        has_ball(player): {state-fluent, bool, default = false};                    // determines whether a player owns the ball
+        has_scored: {state-fluent, bool, default = false};                          // determines whether the team has scored a goal
+        lost_possession: {state-fluent, bool, default = false};                     // determines whether the team lost the possession of the ball
+
+
+        ////////////////////////// interm-fluent
+        valid_move_x(player): {interm-fluent, bool};                                // is used to verify that a movement in x direction is valid
+        valid_move_y(player): {interm-fluent, bool};                                // is used to verify that a movement in y direction is valid
+        is_in_defense(player): {interm-fluent, bool};                               // determines whether the player is inside the defense zone
+        is_in_offense(player): {interm-fluent, bool};                               // determines whether the player is inside the offense zone
+        is_in_upper_wing(player): {interm-fluent, bool};                            // determines whether the player is inside the upper wing
+        is_in_lower_wing(player): {interm-fluent, bool};                            // determines whether the player is inside the lower wing
+        is_in_mid_field(player): {interm-fluent, bool};                             // determines whether the player is inside the mif-field
+        passed_the_ball(player): {interm-fluent, bool};                             // determines whether the player has passed the ball
+        should_get_ball(player): {interm-fluent, bool};                             // determines whether anyone has passed the ball to the player
+        shot_the_ball(player): {interm-fluent, bool};                               // determines whether the player has shot the ball
+        scored(player): {interm-fluent, bool};                                      // determines whether a player has scored a goal
+
+        ////////////////////////// action-fluents
+        pass(player, player): {action-fluent, bool, default = false};               // the action of a player passing the ball to another player
+        shoot(player): {action-fluent, bool, default = false};                      // the action of a player shooting the ball to the opponent's goal
+        move_to_x(player): {action-fluent, int, default = 0};                       // the action of a player chaning its x coordinate
+        move_to_y(player): {action-fluent, int, default = 0};                       // the action of a player chaning its y coordinate
+    };
+
+    cpfs {
+        ///////// updating the interm-fluents
+        //// determine the region of the player
+        is_in_defense(?p) = if ((player_pos_x(?p) <= DEFENSE_AREA_X) & (player_pos_y(?p) <= DEFENSE_AREA_Y) & (player_pos_y(?p) >= -DEFENSE_AREA_Y))
+                                then KronDelta(true)
+                            else if ((player_pos_x(?p) <= DEFENSE_AREA_X) & (player_pos_y(?p) <= DEFENSE_AREA_Y + ((UPPER_BOUNDARY_Y - DEFENSE_AREA_Y) / (LEFT_BOUNDARY_X - DEFENSE_AREA_X)) * (player_pos_x(?p) - DEFENSE_AREA_X)))
+                                then KronDelta(true)
+                            else if ((player_pos_x(?p) <= DEFENSE_AREA_X) & (player_pos_y(?p) >= -DEFENSE_AREA_Y + ((LOWER_BOUNDARY_Y + DEFENSE_AREA_Y) / (LEFT_BOUNDARY_X - DEFENSE_AREA_X)) * (player_pos_x(?p) - DEFENSE_AREA_X)))
+                                then KronDelta(true)
+                            else KronDelta(false);
+
+        is_in_offense(?p) = if ((player_pos_x(?p) >= OFFENSE_AREA_X) & (player_pos_y(?p) <= OFFENSE_AREA_Y) & (player_pos_y(?p) >= -OFFENSE_AREA_Y))
+                                then KronDelta(true)
+                            else if ((player_pos_x(?p) >= OFFENSE_AREA_X) & (player_pos_y(?p) <= OFFENSE_AREA_Y + ((UPPER_BOUNDARY_Y - OFFENSE_AREA_Y) / (RIGHT_BOUNDARY_X - OFFENSE_AREA_X)) * (player_pos_x(?p) - OFFENSE_AREA_X)))
+                                then KronDelta(true)
+                            else if ((player_pos_x(?p) >= OFFENSE_AREA_X) & (player_pos_y(?p) >= -OFFENSE_AREA_Y + ((LOWER_BOUNDARY_Y + OFFENSE_AREA_Y) / (RIGHT_BOUNDARY_X - OFFENSE_AREA_X)) * (player_pos_x(?p) - OFFENSE_AREA_X)))
+                                then KronDelta(true)
+                            else KronDelta(false);
+
+        is_in_upper_wing(?p) = if ((player_pos_y(?p) >= OFFENSE_AREA_Y) & (player_pos_x(?p) <= OFFENSE_AREA_X) & (player_pos_x(?p) >= DEFENSE_AREA_X))
+                                then KronDelta(true)
+                            else if ((player_pos_x(?p) > OFFENSE_AREA_X) & (player_pos_y(?p) > OFFENSE_AREA_Y + ((UPPER_BOUNDARY_Y - OFFENSE_AREA_Y) / (RIGHT_BOUNDARY_X - OFFENSE_AREA_X)) * (player_pos_x(?p) - OFFENSE_AREA_X)))
+                                then KronDelta(true)
+                            else if ((player_pos_x(?p) < DEFENSE_AREA_X) & (player_pos_y(?p) > DEFENSE_AREA_Y + ((UPPER_BOUNDARY_Y - DEFENSE_AREA_Y) / (LEFT_BOUNDARY_X - DEFENSE_AREA_X)) * (player_pos_x(?p) - DEFENSE_AREA_X)))
+                                then KronDelta(true)
+                            else KronDelta(false);
+
+        is_in_lower_wing(?p) = if ((player_pos_y(?p) <= -OFFENSE_AREA_Y) & (player_pos_x(?p) <= OFFENSE_AREA_X) & (player_pos_x(?p) >= DEFENSE_AREA_X))
+                                then KronDelta(true)
+                            else if ((player_pos_x(?p) > OFFENSE_AREA_X) & (player_pos_y(?p) < -OFFENSE_AREA_Y + ((LOWER_BOUNDARY_Y + OFFENSE_AREA_Y) / (RIGHT_BOUNDARY_X - OFFENSE_AREA_X)) * (player_pos_x(?p) - OFFENSE_AREA_X)))
+                                then KronDelta(true)
+                            else if ((player_pos_x(?p) < DEFENSE_AREA_X) & (player_pos_y(?p) < -DEFENSE_AREA_Y + ((LOWER_BOUNDARY_Y + DEFENSE_AREA_Y) / (LEFT_BOUNDARY_X - DEFENSE_AREA_X)) * (player_pos_x(?p) - DEFENSE_AREA_X)))
+                                then KronDelta(true)
+                            else KronDelta(false);
+
+        is_in_mid_field(?p) = if (is_in_defense(?p) | is_in_lower_wing(?p) | is_in_upper_wing(?p) | is_in_offense(?p)) then KronDelta(false) else KronDelta(true);
+
+        //// check if the movement for a player is valid (movement is within one cell)
+        valid_move_x(?p) = if ((abs[move_to_x(?p) - player_pos_x(?p)] >= 0) & (move_to_x(?p) >= LEFT_BOUNDARY_X) & (move_to_x(?p) <= RIGHT_BOUNDARY_X)) then KronDelta(true) else KronDelta(false);
+        valid_move_y(?p) = if ((abs[move_to_y(?p) - player_pos_y(?p)] >= 0) & (move_to_y(?p) >= LOWER_BOUNDARY_Y) & (move_to_y(?p) <= UPPER_BOUNDARY_Y)) then KronDelta(true) else KronDelta(false);
+
+        //// check if a player has passed the ball
+        passed_the_ball(?p) = if (has_ball(?p) & exists_{?p2: player}[pass(?p, ?p2)]) then KronDelta(true) else KronDelta(false);
+
+        //// check if a player should receive the ball
+        //should_get_ball(?p) = if (~has_ball(?p) & exists_{?p2: player}[pass(?p2, ?p)]) 
+        //                        then
+        //                            if (is_in_defense(?p2)) // if the player who passed the ball is in the defense area
+        //                                then Bernoulli(1 - PASS_INTERCEPT_PROB1)
+        //                            else if (is_in_mid_field(?p2)) // if the player who passed the ball is in the mid-field area
+        //                                then Bernoulli(1 - PASS_INTERCEPT_PROB2)
+        //                            else if (is_in_upper_wing(?p2)) // if the player who passed the ball is in the upper wing area
+        //                                then Bernoulli(1 - PASS_INTERCEPT_PROB3)
+        //                            else if (is_in_lower_wing) // if the player who passed the ball is in the lower wing area
+        //                                then Bernoulli(1 - PASS_INTERCEPT_PROB4)
+        //                            else if (is_in_offense(?p2)) // if the player who passed the ball is in the offense area
+        //                                then Bernoulli(1 - PASS_INTERCEPT_PROB5)
+        //                            else KronDelta(true) 
+        //                    else KronDelta(false);
+
+        should_get_ball(?p) = if (~has_ball(?p) & exists_{?p2: player}[pass(?p2, ?p)])
+                                  then Bernoulli(1 - PASS_INTERCEPT_PROB1)
+                              else KronDelta(false);
+
+        //// check if a player has shot the ball
+        shot_the_ball(?p) = if (has_ball(?p) & shoot(?p)) then KronDelta(true) else KronDelta(false);
+
+        //// check if anyone has scored a goal
+        scored(?p) = if (has_ball(?p) & shot_the_ball(?p))
+                         then
+                             if (is_in_defense(?p)) // if the player who shoots the ball is in the defense area
+                                 then Bernoulli(SHOOT_SUCCESS_PROB1)
+                             else if (is_in_mid_field(?p)) // if the player who shoots the ball is in the mid-field area
+                                 then Bernoulli(SHOOT_SUCCESS_PROB2)
+                             else if (is_in_upper_wing(?p)) // if the player who shoots the ball is in the upper wing area
+                                 then Bernoulli(SHOOT_SUCCESS_PROB1)
+                             else if (is_in_lower_wing(?p)) // if the player who shoots the ball is in the lower wing area
+                                 then Bernoulli(SHOOT_SUCCESS_PROB1)
+                             else if (is_in_offense(?p)) // if the player who shoots the ball is in the offense area
+                                 then Bernoulli(SHOOT_SUCCESS_PROB1)
+                             else KronDelta(false)
+                      else KronDelta(false);
+        //////////////////////////////////////////////////////////////////////////////
+
+        //////// updating the state-fluents
+        //// updating the player positions
+        // if the movement is not valid the player does not move at all, otherwise the coordinates change accordingly
+        player_pos_x'(?p) = if (valid_move_x(?p)) then move_to_x(?p) else player_pos_x(?p);
+        player_pos_y'(?p) = if (valid_move_y(?p)) then move_to_y(?p) else player_pos_y(?p);
+
+        //// updating the status of the ball
+        has_ball'(?p) = 
+            if (has_ball(?p)) // if the player had the ball int the previous state
+                then 
+                    if (valid_move_x(?p) | valid_move_y(?p)) // if the player's action was a valid move (then we should evaluate the state at different regions of the pitch)
+                        then 
+                            if (is_in_defense(?p)) // if the player is in the defense area
+                                then Bernoulli(1 - LOSE_POSSESSION_PROB1)
+                            else if (is_in_mid_field(?p)) // if the player is in the mid-field area
+                                then Bernoulli(1 - LOSE_POSSESSION_PROB2)
+                            else if (is_in_upper_wing(?p)) // if the player is in the upper wing area
+                                then Bernoulli(1 - LOSE_POSSESSION_PROB3)
+                            else if (is_in_lower_wing(?p)) // if the player is in the lower wing area
+                                then Bernoulli(1 - LOSE_POSSESSION_PROB4)
+                            else if (is_in_offense(?p)) // if the player is in the offense area
+                                then Bernoulli(1 - LOSE_POSSESSION_PROB5)
+                            else KronDelta(true)
+                    else if (passed_the_ball(?p))
+                        then KronDelta(false)   // if the player passes the ball he/she won't have it any longer
+                    else if (shot_the_ball(?p))
+                        then KronDelta(false)   // if the player shoots the ball he/she won't have it any longer
+                    else KronDelta(true)
+            else if (~has_ball(?p) & should_get_ball(?p)) // if the player did not have the ball but someone passed the ball successfully to him/her
+                then KronDelta(true)
+            else KronDelta(false); // if the player did not have the ball and no one did not pass the ball to him/her
+        
+
+        //// updating the status of the score
+        has_scored' = if (exists_{?p: player}[scored(?p)]) then KronDelta(true) else KronDelta(false);
+
+        lost_possession' = if (~exists_{?p: player}[has_ball(?p)]) then KronDelta(true) else KronDelta(false);
+    };
+
+    reward = has_scored;
+
+    state-action-constraints {
+        sum_{?p: player}[has_ball(?p)] == 1;
+    };
+
+    action-preconditions {
+        forall_{?p: player}[move_to_x(?p) <= RIGHT_BOUNDARY_X];
+        forall_{?p: player}[move_to_x(?p) >= LEFT_BOUNDARY_X];
+        forall_{?p: player}[move_to_y(?p) <= UPPER_BOUNDARY_Y];
+        forall_{?p: player}[move_to_y(?p) >= LOWER_BOUNDARY_Y];
+    };
+}
