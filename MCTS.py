@@ -1,0 +1,114 @@
+import numpy as np
+
+from tqdm import tqdm
+from typing import List
+from collections import defaultdict
+from state import State
+from pyRDDLGym import RDDLEnv
+from utils import InstanceInfo
+
+
+class MonteCarloTreeSearchNode:
+    def __init__(self, state: State, parent=None, parent_action=None):
+        self.state = state
+        self.parent = parent
+        self.parent_action = parent_action
+        self.children = []
+        self._number_of_visits = 0
+        self._results = defaultdict(int)
+        self._results[1] = 0
+        self._results[-1] = 0
+        self._untried_actions = None
+        self._untried_actions = self.untried_actions()
+    
+    def untried_actions(self) -> List:
+        untried_actions = self.state.get_legal_actions()
+        
+        return untried_actions
+    
+    def q(self):
+        wins = self._results[1]
+        loses = self._results[-1]
+        
+        return wins - loses
+    
+    def n(self):
+        return self._number_of_visits
+    
+    def expand(self):
+        action = self._untried_actions.pop()
+        next_state = self.state.move(action)
+        child_node = MonteCarloTreeSearchNode(next_state, parent=self, parent_action=action)
+        self.children.append(child_node)
+        
+        return child_node
+
+    def is_terminal_node(self):
+        return self.state.is_game_over()
+    
+    def rollout(self):
+        current_rollout_state = self.state
+        
+        while not current_rollout_state.is_game_over():
+            possible_moves = current_rollout_state.get_legal_actions()
+            
+            action = self.rollout_policy(possible_moves)
+            current_rollout_state = current_rollout_state.move(action)
+        
+        return current_rollout_state.game_result()
+    
+    def backpropagate(self, result):
+        self._number_of_visits += 1
+        self._results[result] += 1
+        if self.parent:
+            self.parent.backpropagate(result)
+    
+    def is_fully_expanded(self):
+        return len(self._untried_actions) == 0
+    
+    def best_child(self, expansion_param=0.):
+        choices_weights = [(c.q() / c.n()) + expansion_param * np.sqrt((2 * np.log(self.n()) / c.n())) for c in self.children]
+        
+        return self.children[np.argmax(choices_weights)]
+    
+    def rollout_policy(self, possible_moves):
+        return possible_moves[np.random.randint(len(possible_moves))]
+
+    def _tree_policy(self):
+        current_node = self
+        
+        while not current_node.is_terminal_node():
+            if not current_node.is_fully_expanded():
+                return current_node.expand()
+            else:
+                current_node = current_node.best_child()
+        return current_node
+    
+    def best_action(self):
+        num_simulations = 10000
+        
+        for _ in tqdm(range(num_simulations)):
+            v = self._tree_policy()
+            reward = v.rollout()
+            v.backpropagate(reward)
+        
+        return self.best_child(expansion_param=0.1)
+
+
+if __name__ == '__main__':
+    domain_path = 'domain2.rddl'
+    instance_path = 'instance5.rddl'
+    
+    env = RDDLEnv.RDDLEnv(domain=domain_path, instance=instance_path)
+    instance_info = InstanceInfo(instance_path)
+    
+    initial_state = State(env.reset(), env, instance_info.get_pitch_boundary(), instance_info.get_num_players(), instance_info.get_defense_offense_lines())
+    # print(initial_state.state)
+    root = MonteCarloTreeSearchNode(initial_state)
+    selected_node = root.best_action()
+    print(root.q())
+    # for i in range(10):
+    #     print(selected_node.state.state)
+    #     root = selected_node
+    #     selected_node = root.best_action()
+    print(selected_node.state.state)
